@@ -1,0 +1,456 @@
+---
+title: "Sports_Analysis"
+author: "Sergio Abbate"
+date: "15/6/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 1. Read the file
+
+```{r}
+library(readxl)
+df = read_xlsx("EPL 2018-2019 Performance Stats (FinalData) Excel.xlsx")
+head(df)
+
+```
+# Define and Use 2 functions to summarize the dataset and check for Quality issues
+
+```{r}
+#Define the functions
+
+summarize_factor = function(dataset) {
+  
+  dataset = select_if(dataset, is.factor)
+  summary.table = data.frame(Attribute = names(dataset))
+  
+  summary.table = summary.table %>% 
+    mutate('Missing Values' = apply(dataset, 2, function (x) sum(is.na(x))),
+           'Unique Values' = apply(dataset, 2, function (x) length(unique(x))),
+    )
+  summary.table
+}
+
+summarize_numeric = function(dataset) {
+  
+  dataset = select_if(dataset, is.numeric)
+  summary.table = data.frame(Attribute = names(dataset))
+  
+  summary.table = summary.table %>% 
+    mutate('Missing Values' = apply(dataset, 2, function (x) sum(is.na(x))),
+           'Unique Values' = apply(dataset, 2, function (x) length(unique(x))),
+           'Mean' = colMeans(dataset, na.rm = TRUE),
+           'Min' = apply(dataset, 2, function (x) min(x, na.rm = TRUE)),
+           'Max' = apply(dataset, 2, function (x) max(x, na.rm = TRUE)),
+           'SD' = apply(dataset, 2, function (x) sd(x, na.rm = TRUE))
+    )
+  summary.table
+}
+```
+
+# 3. Drop unused columns
+
+```{r}
+library(tidyverse)
+df = df%>% select(-birthday, -league, -season, -nationality, -birthday_GMT)
+```
+
+# 4. Ajust Column Types
+
+```{r}
+df$position = factor(df$position, order = TRUE, levels = c("Goalkeeper", "Defender", "Midfielder", "Forward"))
+df$`Current Club` = factor(df$`Current Club`)
+df$goals_involved_per_90_overall = as.numeric(df$goals_involved_per_90_overall)
+df$assists_per_90_overall = as.numeric(df$assists_per_90_overall)
+df$goals_per_90_overall = as.numeric(df$goals_per_90_overall)
+df$goals_per_90_home = as.numeric(df$goals_per_90_home)
+df$goals_per_90_away = as.numeric(df$goals_per_90_away)
+df$conceded_per_90_overall = as.numeric(df$conceded_per_90_overall)
+df$cards_per_90_overall = as.numeric(df$cards_per_90_overall)
+df$assists_per_90_overall = as.numeric(df$assists_per_90_overall)
+
+```
+
+# 5. Check for Quality Issues
+
+```{r}
+format(summarize_numeric(df), scientific = FALSE)
+format(summarize_factor(df), scientific = FALSE)
+```
+There are No Missing Values in any of the columns
+
+## Ranking columns
+
+```{r}
+df %>% select(rank_in_club_top_scorer, rank_in_league_top_attackers, rank_in_league_top_midfielders, rank_in_league_top_defenders) %>% summarize_numeric()
+```
+```{r}
+library(gridExtra)
+g1 = ggplot(df) + geom_boxplot(aes(y = rank_in_league_top_attackers)) + facet_grid(~position) + theme(axis.ticks.x = element_blank(),axis.text.x = element_blank()) + ylab("Rank Top Attackers") 
+g2 = ggplot(df) + geom_boxplot(aes(y = rank_in_league_top_midfielders)) + facet_grid(~position) + theme(axis.ticks.x = element_blank(),axis.text.x = element_blank()) + ylab("Rank Top Midfielders")
+g3 = ggplot(df) + geom_boxplot(aes(y = rank_in_league_top_defenders)) + facet_grid(~position) + theme(axis.ticks.x = element_blank(),axis.text.x = element_blank()) + ylab("Rank Top Defenders")
+g4 = ggplot(df) + geom_boxplot(aes(y = rank_in_club_top_scorer)) + facet_grid(~position) + theme(axis.ticks.x = element_blank(),axis.text.x = element_blank()) + ylab("Rank Top Scorers")
+
+grid.arrange(g1,g2,g3,g4 , nrow = 2, top =  "Distribution of Ranking columns across positions")
+```
+Just drop the ranking columns
+```{r}
+df  = df %>% select(-rank_in_club_top_scorer, -rank_in_league_top_attackers, -rank_in_league_top_midfielders, -rank_in_league_top_defenders)
+```
+
+
+# 6. Divide dataset into 4 subsets: Goalkeeper GK, Defender DF, Midfielder MD, Forward F
+
+```{r}
+goalkeepers = df %>% filter(position == "Goalkeeper")
+defenders = df %>% filter(position == "Defender")
+midfielders = df %>% filter(position == "Midfielder")
+forwards = df %>% filter(position == "Forward")
+```
+
+# 7. Subselect the appropiate columns to analyze each position
+
+For the Goalkeepers, we are not interested in the goals scored or assist, but in the clean sheets, goals conceded and related stats.
+
+```{r}
+goalkeepers = goalkeepers %>% select(-goals_overall, -goals_home, -goals_away, -assists_overall, -assists_home, -assists_away, -penalty_goals, -penalty_misses, -goals_involved_per_90_overall, -assists_per_90_overall, -goals_per_90_away, -goals_per_90_overall, -goals_per_90_home, -min_per_goal_overall, min_per_assist_overall)
+```
+
+For the Defenders, usually they do not score Goals or provide many assists, but some of them do, so we will keep these columns and all related columns, since they are a measure of performance and somehow can affect the Salary. However the most important columns to analyze a defender's performance are:
+- Clean Sheets
+- Goals Conceded
+- Yellow and Red Cards
+- Rank
+
+```{r}
+### Defenders ###
+defenders = defenders %>% select(-penalty_goals, -penalty_misses)
+```
+
+For the Midfielders, actually we are interested in almost all the features, because there are some offensive and defensive midfielders. We will leave most of the features.
+
+```{r}
+### Midfielders ### 
+```
+
+For Forwards, we are mostly interested in the measures of goals, assists and offensive characteristics, not clean sheets or goals conceeded.
+
+```{r}
+### Forwards ### 
+forwards = forwards %>% select(-clean_sheets_overall, -clean_sheets_home, -clean_sheets_away, -conceded_overall, -conceded_home, -conceded_away, -conceded_per_90_overall, -min_per_conceded_overall)
+```
+
+General Correlation
+```{r}
+library(ggcorrplot)
+General_CorrMat = round(cor(df %>% select_if(is.numeric)),2)
+ggcorrplot(General_CorrMat) + theme(axis.text.x = element_blank())+ theme(axis.text.y = element_blank()) + ggtitle("Correlation Matrix - Full Dataset")
+```
+
+Specifics about overall vs home and away
+```{r}
+f1 = round(cor(df %>% select(appearances_overall,appearances_home, appearances_away)),2) %>% ggcorrplot(lab = TRUE)
+f2 = round(cor(df %>% select(assists_overall,assists_home, assists_away)),2) %>% ggcorrplot(lab = TRUE)
+f3 = round(cor(df %>% select(goals_overall,goals_home, goals_away)),2) %>% ggcorrplot(lab = TRUE)
+f4 = round(cor(df %>% select(clean_sheets_overall,clean_sheets_home, clean_sheets_away)),2) %>% ggcorrplot(lab = TRUE)
+
+```
+
+
+# 8. Get rid of multicolinearity
+In general, for the purpose of this analysis, there is no need or sense to discriminate goals, assists, cards in away or home, so the column with 'Overall' will do. In fact the 2 columns of away and home are directly related to the column overall. We will look into details into the correlation and decide which columns to drop.
+
+
+There are too many correlated columns, we will take a deeper look
+```{r}
+goalkeepers %>% select(appearances_overall,appearances_home, appearances_away) %>% cor()
+```
+```{r}
+midfielders %>% select(assists_overall,assists_home, assists_away) %>% cor()
+```
+```{r}
+forwards %>% select(goals_overall,goals_home,goals_away) %>% cor()
+```
+But we actually know from subject knowledge that this relationship holds:
+Overall = Away + Home, so all the columns 'overall' are composed from away + home. It is reasonable to drop this discrimination and to keep only the overall columns
+```{r}
+# They are the same: Relationship holds
+v1 = goalkeepers$minutes_played_away + goalkeepers$minutes_played_home
+v2 = goalkeepers$minutes_played_overall
+tail(matrix(c(v1, v2), ncol = 2))
+```
+```{r}
+# They are the same: Relationship holds
+v1 = forwards$goals_overall
+v2 = forwards$goals_home + forwards$goals_away
+head(matrix(c(v1, v2), ncol = 2))
+```
+
+```{r}
+## Remove all the Away and Home columns and just leave the overall columns ##
+
+## Goalkeepers
+
+goalkeepers = goalkeepers %>% select(-minutes_played_home, -minutes_played_away, -appearances_home, -appearances_away, -clean_sheets_home, -clean_sheets_away, -conceded_home, -conceded_away, -min_per_assist_overall)
+
+## Defenders
+
+defenders = defenders %>% select(-minutes_played_home, -minutes_played_away, -appearances_home, -appearances_away, -goals_home, -goals_away, -assists_home, -assists_away, -clean_sheets_home, -clean_sheets_away, -conceded_home, -conceded_away, -goals_per_90_home, -goals_per_90_away)
+
+## Midfielders
+
+midfielders = midfielders %>% select(-minutes_played_home, -minutes_played_away, -appearances_home, -appearances_away, -goals_home, -goals_away, -assists_home, -assists_away, -clean_sheets_home, -clean_sheets_away, -conceded_home, -conceded_away, -goals_per_90_home, -goals_per_90_away)
+
+## Forwards
+
+forwards = forwards %>% select(-minutes_played_home, -minutes_played_away, -appearances_home, -appearances_away, -goals_home, -goals_away, -assists_home, -assists_away, -goals_per_90_home, -goals_per_90_away)
+
+```
+
+
+```{r}
+#Vector of correlations btw minutes played overall and appearances overall
+
+c(cor(df$minutes_played_overall, df$appearances_overall),cor(goalkeepers$minutes_played_overall, goalkeepers$appearances_overall),cor(defenders$minutes_played_overall, defenders$appearances_overall),cor(midfielders$minutes_played_overall, midfielders$appearances_overall),cor(forwards$minutes_played_overall, forwards$appearances_overall))
+
+# Too high correlations - We will drop appearances_overall, since 1 appearance can correspond to 1 minute or 90 minutes. Minutes is a wider and more complete metric
+
+goalkeepers = goalkeepers %>% select(-appearances_overall)
+defenders = defenders %>% select(-appearances_overall)
+midfielders = midfielders %>% select(-appearances_overall)
+forwards = forwards %>% select(-appearances_overall)
+```
+
+# 9. Initial Data Review
+
+## Histogram of Salaries across positions
+
+```{r}
+options(scipen = 999)
+
+## Annual Salary ##
+ggplot(df, aes(x = annual_salary/1000, y = ..density..)) + 
+  geom_histogram(fill = "lightblue") + geom_line(stat = "density", color = "darkblue") + scale_y_continuous(labels = NULL) + theme(axis.ticks.y = element_blank()) + xlab("Annual Salary in Thousand £") + scale_x_continuous(limits = c(0, 20000)) + theme_bw() + ylab("") + facet_wrap(~position, scales = "free_x") + ggtitle("Distribution of Salary across Positions")
+
+## Weekly Salary ##
+
+g1 = ggplot(goalkeepers, aes(x = weekly_salary, y = ..density..)) + 
+  geom_histogram(fill = "lightblue") + geom_line(stat = "density") +
+  scale_y_continuous(labels = NULL)
+g2 = ggplot(defenders, aes(x = weekly_salary, y = ..density..)) + 
+  geom_histogram(fill = "lightblue") + geom_line(stat = "density") +
+  scale_y_continuous(labels = NULL)
+g3 = ggplot(midfielders, aes(x = weekly_salary, y = ..density..)) + 
+  geom_histogram(fill = "lightblue") + geom_line(stat = "density") +
+  scale_y_continuous(labels = NULL)
+g4 = ggplot(forwards, aes(x = weekly_salary, y = ..density..)) + 
+  geom_histogram(fill = "lightblue") + geom_line(stat = "density") +
+  scale_y_continuous(labels = NULL)
+
+library(gridExtra)
+grid.arrange(g1, g2, g3, g4, nrow = 2)
+
+```
+
+## Correlations between performance metrics and Salary across positions
+
+### Subselect the most important performance metrics
+
+In here, there is a component of subject knowledge, to identify which are the most important metrics in each position. I also just selected the 'pure' metrics and not the composite ones, for example, I chose to select goals_overall instead of goals_per_90 which is calculated from goals_overall, and so on.
+
+```{r}
+## Goalkeepers ##
+names(goalkeepers)
+goalkeepers_perf = goalkeepers %>% select(age, minutes_played_overall, clean_sheets_overall, conceded_overall, cards_per_90_overall,min_per_match, annual_salary)
+
+## Defenders ##
+names(defenders)
+defenders_perf = defenders %>% select(age, minutes_played_overall, goals_overall, assists_overall, clean_sheets_overall, conceded_overall, cards_per_90_overall, goals_involved_per_90_overall, min_per_match, annual_salary)
+
+## Midfielders ##
+names(midfielders)
+midfielders_perf = midfielders %>% select(age, minutes_played_overall, goals_overall, assists_overall, penalty_goals, penalty_misses, cards_per_90_overall, goals_involved_per_90_overall, min_per_match, annual_salary)
+
+## Forwards ##
+names(forwards)
+forwards_perf = forwards %>% select(age, minutes_played_overall, goals_overall, assists_overall, penalty_goals, penalty_misses, goals_involved_per_90_overall, min_per_match, cards_per_90_overall, annual_salary)
+
+```
+
+### Correlations btw Performance and Salary
+
+```{r}
+## Goalkeepers ##
+Corr_goalkeepers = goalkeepers_perf %>% cor()
+
+ggcorrplot(Corr_goalkeepers, lab = TRUE)
+
+#Dataframe of correlations btw salary and performance metrics
+data.frame(Corr_goalkeepers[,ncol(Corr_goalkeepers)])
+```
+```{r}
+## Defenders ##
+Corr_defenders = defenders_perf %>% cor()
+
+ggcorrplot(Corr_defenders, lab = TRUE)
+
+#Dataframe of correlations btw salary and performance metrics
+data.frame(Corr_defenders[,ncol(Corr_defenders)])
+## Relatively low correlations - nothing significant ##
+
+```
+
+```{r}
+## Midfielders ##
+Corr_midfielders = midfielders_perf %>% cor()
+
+ggcorrplot(Corr_midfielders, lab = TRUE)
+
+data.frame(Corr_midfielders[,ncol(Corr_midfielders)])
+## No significantly high correlations, in fact there are many illogical negative relationships like minutes_played with salary, appearances and goals and assists with Salary
+
+```
+
+```{r}
+## Forwards ##
+Corr_forwards = forwards_perf %>% cor()
+
+ggcorrplot(Corr_forwards, lab = TRUE)
+
+data.frame(Corr_forwards[,ncol(Corr_forwards)])
+## More reasonable and logical correlations. Positive correlation with appearances, goals, assists, minutes played, etc.
+```
+
+## Performance Metrics against Salary PLOTS
+```{r}
+s1 = ggplot(forwards) + geom_point(aes(x = annual_salary/1000, y = goals_overall)) + xlab("Annual Salary in Thousand £") + ylab("Goals") + ggtitle("Forwards") + theme_light()
+# Some high scoring players that have low salary and some low scoring players that have high salaries
+
+s2 = ggplot(midfielders) + geom_point(aes(x = annual_salary/1000, y = assists_overall)) + xlab("Annual Salary in Thousand £") + ylab("Assists") + ggtitle("Midfielders") + theme_light()
+# same pattern 
+
+ggplot(defenders) + geom_point(aes(x = annual_salary, y = clean_sheets_overall))
+# somehow different pattern, shifted to the right, which means the higher the clean sheets, then higher paid
+s3 = ggplot(defenders) + geom_point(aes(x = annual_salary/1000, y = conceded_overall)) + xlab("Annual Salary in Thousand £") + ylab("Goals conceded") + ggtitle("Defenders") + theme_light()
+
+s4 = ggplot(goalkeepers) + geom_point(aes(x = annual_salary/1000, y = clean_sheets_overall)) + xlab("Annual Salary in Thousand £") + ylab("Clean Sheets") + ggtitle("Goalkeepers") + theme_light()
+
+ggplot(goalkeepers) + geom_point(aes(x = annual_salary, y = conceded_overall))
+
+grid.arrange(s4,s3,s2,s1, nrow = 2, top = "Performance across positions vs. Salary")
+```
+```{r}
+## Which position is the best paid ##
+df %>% group_by(position) %>% summarise(avg_salary = mean(annual_salary))
+```
+## Analysis of variance: salary accross Positions
+
+First we will look into the distribution of the 4 positions
+```{r}
+library(ggplot2)
+
+ggplot(df) + geom_boxplot(aes(x = position, y = annual_salary/1000), outlier.size=2,outlier.colour="red") + xlab("Position") + ylab("Annual Salary in Thousand £") + theme_light()
+#They kind of have the same distribution, but different ranges, some wider
+```
+
+
+```{r}
+anova = aov(annual_salary ~ position, data = df)
+summary(anova)
+
+TukeyHSD(anova)
+
+```
+
+# 10. Linear Regression
+
+Goalkeepers
+```{r}
+## Multiple Linear Regression on Goalkeepers ##
+
+m1_goalkeepers = lm(annual_salary ~ age +minutes_played_overall + clean_sheets_overall + conceded_overall + min_per_match + cards_per_90_overall,goalkeepers_perf) 
+
+summary(m1_goalkeepers)
+#R2 of 0.30 which is pretty low
+
+# If we drop all not significant predictors #
+
+m2_goalkeepers = lm(annual_salary ~ conceded_overall + min_per_match, goalkeepers_perf)
+
+summary(m2_goalkeepers)
+# By dropping attributes R2 decreases to 0.163 and just min_per_match remains significant
+```
+
+Defenders
+```{r}
+## Multiple Linear Regression on Defenders ##
+
+m1_defenders = lm(annual_salary ~ age + minutes_played_overall + clean_sheets_overall + conceded_overall + assists_overall + goals_overall + goals_involved_per_90_overall + min_per_match + cards_per_90_overall, defenders_perf) 
+
+summary(m1_defenders)
+
+```
+
+Midfielders
+```{r}
+## Multiple Linear Regression on Midfielders ##
+
+m1_midfielders = lm(annual_salary ~ age + minutes_played_overall + assists_overall + goals_overall + penalty_goals + penalty_misses + goals_involved_per_90_overall + min_per_match + cards_per_90_overall, midfielders_perf) 
+
+summary(m1_midfielders)
+
+# R2 of 0.144
+
+# Dropping all non significant predictors
+
+m2_midfielders = lm(annual_salary ~ age, midfielders_perf) 
+
+summary(m2_midfielders)
+
+# Just age remains significant and R2 is 0.04, really low
+```
+
+Forwards
+```{r}
+## Multiple Linear Regression on Forwards ##
+
+m1_forwards = lm(annual_salary ~ age + minutes_played_overall + assists_overall + goals_overall + penalty_goals + penalty_misses + goals_involved_per_90_overall + min_per_match + cards_per_90_overall, forwards_perf) 
+
+summary(m1_forwards)
+
+# R2 of 0.15 and all predictors are not significant
+
+```
+# Most Appropiate Variables
+I think that these are the most important performance metrics for each position
+```{r}
+## Goalkeepers ##
+msimple_goalkeepers = lm(annual_salary ~ minutes_played_overall + clean_sheets_overall + conceded_overall, goalkeepers_perf)
+
+summary(msimple_goalkeepers)
+#Worst than before
+
+## Defenders ##
+msimple_defenders = lm(annual_salary ~ minutes_played_overall +  conceded_overall + goals_involved_per_90_overall, defenders_perf)
+
+summary(msimple_defenders)
+#Worst than before
+
+## Midfielders ##
+msimple_midfielders = lm(annual_salary ~ minutes_played_overall + goals_overall + assists_overall + goals_involved_per_90_overall, midfielders_perf)
+
+summary(msimple_midfielders)
+#Worst than before
+
+## Forwards ##
+msimple_forwards = lm(annual_salary ~ minutes_played_overall + goals_overall + assists_overall + goals_involved_per_90_overall, forwards_perf)
+
+summary(msimple_forwards)
+#Worst than before
+
+```
+
+
